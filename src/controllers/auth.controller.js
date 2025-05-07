@@ -1,15 +1,13 @@
 const authService = require('../services/auth.service');
-
 const cookieOptions = {
   httpOnly: true,
-  secure: true,  // Always use secure in production for cross-domain
-  sameSite: 'None',  // Required for cross-site cookies
-  path: '/',  // Make cookie available across all paths
-  domain: process.env.NODE_ENV === 'production'
-    ? '.vercel.app'  // Domain needs to be a parent domain without protocol
-    : 'localhost',
+  secure: true,  // Must be true for cross-origin in production
+  sameSite: 'None',  // Must be 'None' for cross-origin cookies
+  path: '/',  // Make cookie available on all paths
+  // Remove domain setting completely - this is often the issue
   maxAge: 7 * 24 * 60 * 60 * 1000,  // 7 days
 };
+
 
 exports.signup = async (req, res, next) => {
   try {
