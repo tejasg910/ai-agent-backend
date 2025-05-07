@@ -2,12 +2,13 @@ const authService = require('../services/auth.service');
 
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',  // only over HTTPS :contentReference[oaicite:6]{index=6}
-  sameSite: 'None',                                    // allow cross‐site
+  secure: true,  // Always use secure in production for cross-domain
+  sameSite: 'None',  // Required for cross-site cookies
+  path: '/',  // Make cookie available across all paths
   domain: process.env.NODE_ENV === 'production'
-    ? '.https://ai-agent-frontend-five.vercel.app'                                 // if you own a shared domain
+    ? '.vercel.app'  // Domain needs to be a parent domain without protocol
     : 'localhost',
-  maxAge: 7 * 24 * 60 * 60 * 1000,                 // 7 days
+  maxAge: 7 * 24 * 60 * 60 * 1000,  // 7 days
 };
 
 exports.signup = async (req, res, next) => {
