@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
-const cors = require('./middleware/cors');
+const cors = require('cors');
 const errorHandler = require('./middleware/errorHandler');
 const cookieParser = require('cookie-parser');
 const jobsRoutes = require('./routes/jobs.routes');
@@ -24,7 +24,10 @@ var logger = morgan('dev')
 app.use(logger)
 
 // Middleware
-app.use(cors);
+app.use(cors({
+  origin: 'https://ai-agent-frontend-five.vercel.app', // Exact match
+  credentials: true // Essential for cookies
+}));
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET,
