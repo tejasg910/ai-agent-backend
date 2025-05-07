@@ -24,7 +24,12 @@ var logger = morgan('dev')
 app.use(logger)
 
 // Middleware
-app.use(cors);
+const corsOptions = {
+  origin: ['https://ai-agent-frontend-five.vercel.app'],
+  credentials: true,
+};
+app.use(cors(corsOptions));
+
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET,
