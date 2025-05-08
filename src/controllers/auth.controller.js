@@ -6,6 +6,8 @@ const cookieOptions = {
   path: '/',  // Make cookie available on all paths
   // Remove domain setting completely - this is often the issue
   maxAge: 7 * 24 * 60 * 60 * 1000,  // 7 days
+  partitioned: true // Add this line
+
 };
 
 
