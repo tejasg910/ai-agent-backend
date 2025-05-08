@@ -25,8 +25,10 @@ app.use(logger)
 
 // Middleware
 app.use(cors({
-  origin: 'https://ai-agent-frontend-five.vercel.app', // Exact match
-  credentials: true // Essential for cookies
+  origin: 'https://ai-agent-frontend-five.vercel.app',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(session({
