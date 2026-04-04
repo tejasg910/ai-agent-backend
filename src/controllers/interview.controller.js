@@ -4,21 +4,8 @@ const Slot = require('../models/Slot');
 const Appointment = require('../models/Appointment');
 const { validationResult } = require('express-validator');
 const { body } = require('express-validator');
-const { google } = require('googleapis');
+const axios = require('axios');
 const appointmentService = require('../services/appointments.service');
-const { OAuth2 } = google.auth;
-
-// Configure Google Calendar API
-const oauth2Client = new OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET
-);
-
-oauth2Client.setCredentials({
-  refresh_token: process.env.GOOGLE_REFRESH_TOKEN
-});
-
-const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
 exports.validateScheduleInterview = [
   body('candidateId').isMongoId().withMessage('Valid candidate ID is required'),
@@ -86,8 +73,6 @@ exports.scheduleInterview = async (req, res, next) => {
     }
 
     const { candidateId, slotId, interviewType, job_id, recruiterId } = req.body;
- 
-    console.log(recruiterId, "This is recruiter id")
     // Verify candidate exists and is shortlisted
     const candidate = await Candidate.findById(candidateId);
     if (!candidate) {
@@ -129,16 +114,19 @@ exports.scheduleInterview = async (req, res, next) => {
     slot.is_available = false;
     await slot.save();
 
-    // Create a Google Meet appointment
-    const meetLink = await createGoogleMeetAppointment(candidate, slot, interviewType);
-    console.log(meetLink, "This is meeting link ")
+    // Create a Cal.com booking
+    const bookingDetails = await createCalComBooking(candidate, slot, interviewType);
+    console.log(bookingDetails.meetingLink, "This is meeting link from Cal.com")
+    
     // Create an appointment record
     const appointment = await Appointment.create({
       candidate_id: candidateId,
       slot_id: slotId,
       interview_type: interviewType,
       status: 'booked',
-      meeting_link: meetLink,
+      meeting_link: bookingDetails.meetingLink,
+      cal_com_booking_id: bookingDetails.bookingId,
+      cal_com_uid: bookingDetails.uid,
       created_at: new Date(),
       recruiterId: recruiterId,
       job_id
@@ -156,7 +144,9 @@ exports.scheduleInterview = async (req, res, next) => {
         start_time: slot.start_time,
         end_time: slot.end_time,
         interview_type: interviewType,
-        meeting_link: meetLink
+        meeting_link: bookingDetails.meetingLink,
+        cal_com_booking_id: bookingDetails.bookingId,
+        cal_com_uid: bookingDetails.uid
       },
       candidate: {
         id: candidate._id,
@@ -181,9 +171,8 @@ exports.scheduleInterviewRecruiter = async (req, res, next) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { candidateId, slotId, interviewType, job_id,  } = req.body;
- const recruiterId = req.user._id;
-    console.log(recruiterId, "This is recruiter id")
+    const { candidateId, slotId, interviewType, job_id } = req.body;
+    const recruiterId = req.user._id;
     // Verify candidate exists and is shortlisted
     const candidate = await Candidate.findById(candidateId);
     if (!candidate) {
@@ -225,16 +214,19 @@ exports.scheduleInterviewRecruiter = async (req, res, next) => {
     slot.is_available = false;
     await slot.save();
 
-    // Create a Google Meet appointment
-    const meetLink = await createGoogleMeetAppointment(candidate, slot, interviewType);
-    console.log(meetLink, "This is meeting link ")
+    // Create a Cal.com booking
+    const bookingDetails = await createCalComBooking(candidate, slot, interviewType);
+    console.log(bookingDetails.meetingLink, "This is meeting link from Cal.com")
+    
     // Create an appointment record
     const appointment = await Appointment.create({
       candidate_id: candidateId,
       slot_id: slotId,
       interview_type: interviewType,
       status: 'booked',
-      meeting_link: meetLink,
+      meeting_link: bookingDetails.meetingLink,
+      cal_com_booking_id: bookingDetails.bookingId,
+      cal_com_uid: bookingDetails.uid,
       created_at: new Date(),
       recruiterId: recruiterId,
       job_id
@@ -252,7 +244,9 @@ exports.scheduleInterviewRecruiter = async (req, res, next) => {
         start_time: slot.start_time,
         end_time: slot.end_time,
         interview_type: interviewType,
-        meeting_link: meetLink
+        meeting_link: bookingDetails.meetingLink,
+        cal_com_booking_id: bookingDetails.bookingId,
+        cal_com_uid: bookingDetails.uid
       },
       candidate: {
         id: candidate._id,
@@ -268,21 +262,24 @@ exports.scheduleInterviewRecruiter = async (req, res, next) => {
 };
 
 /**
- * Creates a Google Meet appointment and returns the meeting link
+ * Creates a Cal.com booking and returns the meeting link
  */
-async function createGoogleMeetAppointment(candidate, slot, interviewType) {
+async function createCalComBooking(candidate, slot, interviewType) {
   try {
     const slotDate = new Date(slot.date);
     const [startHour, startMinute] = slot.start_time.split(':').map(Number);
-    const [endHour, endMinute] = slot.end_time.split(':').map(Number);
 
     const startDateTime = new Date(slotDate);
     startDateTime.setHours(startHour, startMinute, 0);
 
-    const endDateTime = new Date(slotDate);
-    endDateTime.setHours(endHour, endMinute, 0);
+    // Format date for Cal.com (ISO 8601)
+    const startTimeISO = startDateTime.toISOString();
+    
+    // Calculate end time (assuming 30 min default duration if not specified)
+    const endDateTime = new Date(startDateTime.getTime() + 30 * 60 * 1000);
+    const endTimeISO = endDateTime.toISOString();
 
-    // Define interview title based on type
+    // Define event title based on type
     const interviewTitles = {
       initial: 'Initial Screening',
       technical: 'Technical Interview',
@@ -293,43 +290,47 @@ async function createGoogleMeetAppointment(candidate, slot, interviewType) {
 
     const interviewTitle = interviewTitles[interviewType] || 'Interview';
 
-    // Create calendar event with Google Meet
-    const event = {
-      summary: `${interviewTitle} with ${candidate.name}`,
-      description: `${interviewTitle} for candidate ${candidate.name} (${candidate.email}).`,
-      start: {
-        dateTime: startDateTime.toISOString(),
-        timeZone: 'UTC'
+    // Cal.com API v2 endpoint for booking
+    const CALCOM_API_URL = `${process.env.CALCOM_API_URL}/bookings`;
+    const CALCOM_API_KEY = process.env.CALCOM_API_KEY;
+
+    // Prepare booking payload for Cal.com v2 API
+    const bookingPayload = {
+      start: startTimeISO,
+      attendee: {
+        name: candidate.name,
+        email: candidate.email,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
       },
-      end: {
-        dateTime: endDateTime.toISOString(),
-        timeZone: 'UTC'
-      },
-      attendees: [
-        { email: candidate.email }
-        // Add company email or interviewer email here
-      ],
-      conferenceData: {
-        createRequest: {
-          requestId: `req-${Date.now()}`,
-          conferenceSolutionKey: { type: 'hangoutsMeet' }
-        }
+      eventTypeId: parseInt(process.env.CALCOM_EVENT_TYPE_ID),
+      metadata: {
+        candidateId: candidate._id.toString(),
+        interviewType: interviewType
       }
     };
 
-    const response = await calendar.events.insert({
-      calendarId: 'primary',
-      resource: event,
-      conferenceDataVersion: 1,
-      sendNotifications: true
+    // Make API request to Cal.com v2
+    const response = await axios.post(CALCOM_API_URL, bookingPayload, {
+      headers: {
+        'Authorization': `Bearer ${CALCOM_API_KEY}`,
+        'Content-Type': 'application/json',
+        'cal-api-version': '2026-02-25' // Required API version header
+      }
     });
 
-    // Extract and return the Google Meet link
-    const meetLink = response.data.hangoutLink || response.data.conferenceData?.entryPoints?.[0]?.uri || '';
-    return meetLink;
+    // Extract meeting details from response
+    const bookingData = response.data.data; // v2 wraps data in 'data' property
+    const meetingLink = bookingData.location || bookingData.meetingUrl || '';
+    
+    return {
+      meetingLink,
+      bookingId: bookingData.id,
+      uid: bookingData.uid,
+      status: bookingData.status
+    };
   } catch (error) {
-    console.error('Error creating Google Meet appointment:', error);
-    return ''; // Return empty string if creating meeting fails
+    console.error('Error creating Cal.com booking:', error.response?.data || error.message);
+    throw new Error(`Failed to create Cal.com booking: ${error.response?.data?.message || error.message}`);
   }
 }
 

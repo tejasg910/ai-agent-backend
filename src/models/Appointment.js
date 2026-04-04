@@ -18,7 +18,15 @@ const AppointmentSchema = new mongoose.Schema({
   },
   meeting_link: {
     type: String,
-    required: true, // Added to store Google Meet link from GPTDialogueService
+    required: true, // Added to store meeting link from Cal.com
+  },
+  cal_com_booking_id: {
+    type: String,
+    // Store Cal.com booking ID
+  },
+  cal_com_uid: {
+    type: String,
+    // Store Cal.com booking UID
   },
   status: {
     type: String,
