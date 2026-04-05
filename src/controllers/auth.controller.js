@@ -61,5 +61,15 @@ exports.checkValidRefreshToken = async (req, res) => {
 exports.logout = async (req, res) => {
   const token = req.cookies.refreshToken;
   await authService.logout(token);
-  res.clearCookie('refreshToken').sendStatus(200);
+  
+  // Must mirror the exact same options used when setting the cookie
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'None',
+    path: '/',
+    partitioned: true,
+  });
+  
+  res.json({ message: 'Logged out successfully' });
 };
