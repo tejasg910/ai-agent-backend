@@ -293,7 +293,7 @@ async function createCalComBooking(candidate, slot, interviewType) {
     // Cal.com API v2 endpoint for booking
     const CALCOM_API_URL = `${process.env.CALCOM_API_URL}/bookings`;
     const CALCOM_API_KEY = process.env.CALCOM_API_KEY;
-
+    console.log(CALCOM_API_URL, CALCOM_API_KEY, "Cal.com API URL and Key")
     // Prepare booking payload for Cal.com v2 API
     const bookingPayload = {
       start: startTimeISO,

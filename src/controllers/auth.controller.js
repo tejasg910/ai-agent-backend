@@ -25,7 +25,7 @@ exports.login = async (req, res, next) => {
   try {
     const { user, accessToken, refreshToken } = await authService.login(req.body);
     res.cookie('refreshToken', refreshToken, cookieOptions);
-    res.json({ user, accessToken });
+    res.json({ user, accessToken, refreshToken });
   } catch (err) {
     next(err);
   }
@@ -73,3 +73,5 @@ exports.logout = async (req, res) => {
   
   res.json({ message: 'Logged out successfully' });
 };
+
+

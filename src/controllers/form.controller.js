@@ -90,7 +90,7 @@ exports.createCandidate = async (req, res, next) => {
 
 
 exports.getFormLink = async (req, res, next) => {
-
+console.log(process.env.FRONTEND_URL)
     const id = req.user._id;
 
     if (!id) {
