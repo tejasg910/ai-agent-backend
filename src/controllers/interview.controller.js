@@ -270,15 +270,17 @@ async function createCalComBooking(candidate, slot, interviewType) {
 
     const [startHour, startMinute] = slot.start_time.split(':').map(Number);
 
-    // Build ISO string with explicit IST offset (+05:30)
-    // Avoids relying on server's local timezone (prod servers are usually UTC)
-    const startTimeISO = `${slot.date}T${pad(startHour)}:${pad(startMinute)}:00+05:30`;
+    // Convert IST to UTC by subtracting 5 hours 30 minutes
+    const [year, month, day] = slot.date.split('-').map(Number);
 
-    // Calculate end time (30 min duration)
-    const totalStartMinutes = startHour * 60 + startMinute + 30;
-    const endHour = Math.floor(totalStartMinutes / 60);
-    const endMinute = totalStartMinutes % 60;
-    const endTimeISO = `${slot.date}T${pad(endHour)}:${pad(endMinute)}:00+05:30`;
+    const startInIST = new Date(Date.UTC(year, month - 1, day, startHour, startMinute, 0));
+    // Subtract IST offset (5h 30m = 330 minutes) to get UTC
+    const startInUTC = new Date(startInIST.getTime() - (5 * 60 + 30) * 60 * 1000);
+    const endInUTC = new Date(startInUTC.getTime() + 30 * 60 * 1000);
+
+    // Cal.com expects UTC ISO string
+    const startTimeISO = startInUTC.toISOString(); // e.g. 2025-04-06T03:30:00.000Z
+    const endTimeISO = endInUTC.toISOString();
 
     const interviewTitles = {
       initial: 'Initial Screening',
@@ -299,7 +301,7 @@ async function createCalComBooking(candidate, slot, interviewType) {
       attendee: {
         name: candidate.name,
         email: candidate.email,
-        timeZone: 'Asia/Kolkata' // Hardcoded IST — never rely on server's local timezone
+        timeZone: 'Asia/Kolkata'
       },
       eventTypeId: parseInt(process.env.CALCOM_EVENT_TYPE_ID),
       metadata: {
