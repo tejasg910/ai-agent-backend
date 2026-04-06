@@ -270,17 +270,27 @@ async function createCalComBooking(candidate, slot, interviewType) {
 
     const [startHour, startMinute] = slot.start_time.split(':').map(Number);
 
-    // Convert IST to UTC by subtracting 5 hours 30 minutes
-    const [year, month, day] = slot.date.split('-').map(Number);
+    // Convert slot.date to string safely regardless of whether it's a Date object or string
+    const dateObj = new Date(slot.date);
+    const year = dateObj.getUTCFullYear();
+    const month = dateObj.getUTCMonth() + 1;
+    const day = dateObj.getUTCDate();
 
+    // Treat date+time as IST, convert to UTC for Cal.com
     const startInIST = new Date(Date.UTC(year, month - 1, day, startHour, startMinute, 0));
-    // Subtract IST offset (5h 30m = 330 minutes) to get UTC
     const startInUTC = new Date(startInIST.getTime() - (5 * 60 + 30) * 60 * 1000);
     const endInUTC = new Date(startInUTC.getTime() + 30 * 60 * 1000);
 
-    // Cal.com expects UTC ISO string
-    const startTimeISO = startInUTC.toISOString(); // e.g. 2025-04-06T03:30:00.000Z
+    const startTimeISO = startInUTC.toISOString();
     const endTimeISO = endInUTC.toISOString();
+
+    console.log('Booking time debug:', {
+      rawDate: slot.date,
+      rawTime: slot.start_time,
+      parsedUTC: { year, month, day },
+      startIST: `${year}-${pad(month)}-${pad(day)} ${pad(startHour)}:${pad(startMinute)} IST`,
+      startUTC: startTimeISO
+    });
 
     const interviewTitles = {
       initial: 'Initial Screening',
@@ -332,5 +342,4 @@ async function createCalComBooking(candidate, slot, interviewType) {
     throw new Error(`Failed to create Cal.com booking: ${error.response?.data?.message || error.message}`);
   }
 }
-
 
