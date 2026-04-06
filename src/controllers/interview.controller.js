@@ -266,20 +266,20 @@ exports.scheduleInterviewRecruiter = async (req, res, next) => {
  */
 async function createCalComBooking(candidate, slot, interviewType) {
   try {
-    const slotDate = new Date(slot.date);
+    const pad = (n) => String(n).padStart(2, '0');
+
     const [startHour, startMinute] = slot.start_time.split(':').map(Number);
 
-    const startDateTime = new Date(slotDate);
-    startDateTime.setHours(startHour, startMinute, 0);
+    // Build ISO string with explicit IST offset (+05:30)
+    // Avoids relying on server's local timezone (prod servers are usually UTC)
+    const startTimeISO = `${slot.date}T${pad(startHour)}:${pad(startMinute)}:00+05:30`;
 
-    // Format date for Cal.com (ISO 8601)
-    const startTimeISO = startDateTime.toISOString();
-    
-    // Calculate end time (assuming 30 min default duration if not specified)
-    const endDateTime = new Date(startDateTime.getTime() + 30 * 60 * 1000);
-    const endTimeISO = endDateTime.toISOString();
+    // Calculate end time (30 min duration)
+    const totalStartMinutes = startHour * 60 + startMinute + 30;
+    const endHour = Math.floor(totalStartMinutes / 60);
+    const endMinute = totalStartMinutes % 60;
+    const endTimeISO = `${slot.date}T${pad(endHour)}:${pad(endMinute)}:00+05:30`;
 
-    // Define event title based on type
     const interviewTitles = {
       initial: 'Initial Screening',
       technical: 'Technical Interview',
@@ -290,17 +290,16 @@ async function createCalComBooking(candidate, slot, interviewType) {
 
     const interviewTitle = interviewTitles[interviewType] || 'Interview';
 
-    // Cal.com API v2 endpoint for booking
     const CALCOM_API_URL = `${process.env.CALCOM_API_URL}/bookings`;
     const CALCOM_API_KEY = process.env.CALCOM_API_KEY;
-    console.log(CALCOM_API_URL, CALCOM_API_KEY, "Cal.com API URL and Key")
-    // Prepare booking payload for Cal.com v2 API
+    console.log(CALCOM_API_URL, CALCOM_API_KEY, "Cal.com API URL and Key");
+
     const bookingPayload = {
       start: startTimeISO,
       attendee: {
         name: candidate.name,
         email: candidate.email,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        timeZone: 'Asia/Kolkata' // Hardcoded IST — never rely on server's local timezone
       },
       eventTypeId: parseInt(process.env.CALCOM_EVENT_TYPE_ID),
       metadata: {
@@ -309,19 +308,17 @@ async function createCalComBooking(candidate, slot, interviewType) {
       }
     };
 
-    // Make API request to Cal.com v2
     const response = await axios.post(CALCOM_API_URL, bookingPayload, {
       headers: {
         'Authorization': `Bearer ${CALCOM_API_KEY}`,
         'Content-Type': 'application/json',
-        'cal-api-version': '2026-02-25' // Required API version header
+        'cal-api-version': '2026-02-25'
       }
     });
 
-    // Extract meeting details from response
-    const bookingData = response.data.data; // v2 wraps data in 'data' property
+    const bookingData = response.data.data;
     const meetingLink = bookingData.location || bookingData.meetingUrl || '';
-    
+
     return {
       meetingLink,
       bookingId: bookingData.id,
@@ -333,6 +330,5 @@ async function createCalComBooking(candidate, slot, interviewType) {
     throw new Error(`Failed to create Cal.com booking: ${error.response?.data?.message || error.message}`);
   }
 }
-
 
 
